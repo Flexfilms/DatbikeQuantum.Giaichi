@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production Cost Manager</title>
+<style>
+:root{--orange:#f97316;--orange2:#ea580c;--ink:#171717;--muted:#737373;--line:#e5e5e5;--bg:#f7f7f5;--white:#fff;--green:#15803d;--red:#dc2626;--yellow:#a16207}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit}button{cursor:pointer}.app{min-height:100vh}.topbar{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:30}.brand{font-weight:800;letter-spacing:-.4px}.brand span{color:var(--orange)}.top-actions{display:flex;gap:8px}.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 13px;font-weight:650}.btn:hover{background:#fafafa}.btn.primary{background:var(--orange);border-color:var(--orange);color:#fff}.btn.primary:hover{background:var(--orange2)}.shell{max-width:1600px;margin:auto;padding:24px}.job-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:18px}.job-title{font-size:26px;font-weight:800;letter-spacing:-.7px;margin:0}.sub{color:var(--muted);margin-top:4px}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}.stat small{color:var(--muted);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.6px}.stat strong{display:block;font-size:21px;margin-top:5px;letter-spacing:-.4px}.stat.orange strong{color:var(--orange)}.toolbar{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.search{min-width:260px;flex:1}.field{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 10px;outline:none}.field:focus{border-color:#fdba74;box-shadow:0 0 0 3px #ffedd5}.chips{display:flex;gap:6px;overflow:auto;padding:0 2px 10px}.chip{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 11px}.chip.active{background:#fff7ed;border-color:#fdba74;color:var(--orange2);font-weight:700}.table-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:auto;max-height:calc(100vh - 260px)}table{border-collapse:separate;border-spacing:0;width:100%;min-width:1250px}th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 9px;vertical-align:middle;background:#fff}th{position:sticky;top:0;background:#fafafa;z-index:8;font-size:11px;text-transform:uppercase;letter-spacing:.45px;white-space:nowrap}th:nth-child(1),td:nth-child(1){position:sticky;left:0;z-index:9;width:52px;text-align:center}th:nth-child(2),td:nth-child(2){position:sticky;left:52px;z-index:9;width:110px}th:nth-child(3),td:nth-child(3){position:sticky;left:162px;z-index:9;min-width:300px;box-shadow:5px 0 8px -8px #000}.group td{background:#171717;color:#fff;font-weight:800;padding:7px 10px}.group td:last-child{text-align:right}.group .gname{letter-spacing:.2px}.cell-input{width:100%;border:1px solid transparent;background:transparent;padding:5px;border-radius:6px}.cell-input:hover{background:#fafafa;border-color:var(--line)}.cell-input:focus{background:#fff;border-color:#fdba74;outline:none}.money{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.badge{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:750;white-space:nowrap}.ok{color:var(--green);background:#f0fdf4}.warn{color:var(--yellow);background:#fefce8}.bad{color:var(--red);background:#fef2f2}.muted{color:#a3a3a3}.thumbs{display:flex;gap:4px;align-items:center}.thumb{width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:5px;cursor:pointer}.addcell{color:var(--orange);font-weight:700}.empty{text-align:center;padding:50px;color:var(--muted)}.modal-bg{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;z-index:100}.modal{width:min(620px,calc(100vw - 30px));max-height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 20px 70px #0004}.modal h2{margin:0 0 15px;font-size:20px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-grid .full{grid-column:1/-1}.label{font-size:11px;font-weight:750;color:#525252;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.drop{border:1px dashed #fdba74;background:#fffaf5;border-radius:10px;padding:18px;text-align:center;color:var(--muted)}.preview-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.preview-grid img{width:75px;height:75px;object-fit:cover;border-radius:7px;border:1px solid var(--line)}.toast{position:fixed;right:20px;bottom:20px;background:#171717;color:#fff;padding:11px 14px;border-radius:9px;display:none;z-index:200}.login{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(450px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px}.login-logo{font-size:22px;font-weight:850;margin-bottom:25px}.login-logo span{color:var(--orange)}.login-card h1{margin:0;font-size:27px}.login-card p{color:var(--muted)}.login-card .field{width:100%;margin-bottom:10px}.tabs{display:flex;gap:4px;margin-bottom:12px}.tab{padding:8px 11px;border-radius:8px;border:0;background:transparent}.tab.active{background:#171717;color:#fff}.footer-total{font-weight:800;background:#fafafa}.link{color:#c2410c;text-decoration:none}.hidden{display:none!important}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.job-head{display:block}.topbar{padding:0 12px}.shell{padding:12px}.top-actions .secondary{display:none}.table-wrap{max-height:calc(100vh - 300px)}}
+@media(max-width:560px){.stats{grid-template-columns:1fr 1fr}.stat strong{font-size:17px}.form-grid{grid-template-columns:1fr}.form-grid .full{grid-column:auto}.search{min-width:180px}}
+</style>
+</head>
+<body>
+<div id="login" class="login">
+  <div class="login-card" style="width:min(760px,100%)">
+    <div class="login-logo">PRODUCTION <span>COST</span></div>
+    <h1>Danh sách Job</h1>
+    <p>Chọn một Job để mở workspace chi phí, hoặc tạo Job mới.</p>
+    <div id="jobList"></div>
+    <button class="btn primary" style="width:100%;margin-top:14px" onclick="showCreate()">+ Tạo Job mới</button>
+  </div>
+</div>
+
+<div id="app class="app hidden">
+<header class="topbar">
+  <div class="brand">PRODUCTION <span>COST</span></div>
+  <div class="top-actions">
+    <button class="btn secondary" onclick="newExpense()">+ Thêm khoản chi</button>
+    <button class="btn primary" onclick="exportExcel()">Xuất Excel</button>
+    <button class="btn" onclick="showSettings()">Cài đặt</button>
+    <button class="btn" onclick="logout()">Đổi Job</button>
+  </div>
+</header>
+<main class="shell">
+  <div class="job-head">
+    <div><h1 id="jobName" class="job-title"></h1><div id="jobMeta" class="sub"></div></div>
+    <div class="tabs"><button class="tab active" id="tabExpenses" onclick="switchTab('expenses')">Khoản chi</button><button class="tab" id="tabSummary" onclick="switchTab('summary')">Tổng hợp</button></div>
+  </div>
+  <section id="stats" class="stats"></section>
+  <section id="expenseView">
+    <div class="toolbar">
+      <input id="search" class="field search" placeholder="🔍 Tìm kiếm khoản chi..." oninput="renderTable()">
+      <select id="filterCat" class="field" onchange="renderTable()"><option value="">Danh mục</option></select>
+      <select id="filterPerson" class="field" onchange="renderTable()"><option value="">Người nhập</option></select>
+      <select id="filterVat" class="field" onchange="renderTable()"><option value="">VAT</option><option>Có VAT</option><option>Không VAT</option><option>Chưa xác định</option></select>
+      <select id="filterInvoice" class="field" onchange="renderTable()"><option value="">Hóa đơn</option><option value="vat">Có HĐ VAT</option><option value="nonvat">Có HĐ không VAT</option><option value="missing">Thiếu hóa đơn</option></select>
+      <select id="groupBy" class="field" onchange="renderTable()"><option value="none">Không group</option><option value="category">Group theo danh mục</option><option value="person">Group theo người nhập</option></select>
+    </div>
+    <div class="chips">
+      <button class="chip active" data-q="" onclick="quick(this,'')">TẤT CẢ</button>
+      <button class="chip" data-q="vat" onclick="quick(this,'vat')">CÓ VAT</button>
+      <button class="chip" data-q="nonvat" onclick="quick(this,'nonvat')">KHÔNG VAT</button>
+      <button class="chip" data-q="missingInvoice" onclick="quick(this,'missingInvoice')">THIẾU HÓA ĐƠN</button>
+      <button class="chip" data-q="bill" onclick="quick(this,'bill')">CÓ BILL</button>
+      <button class="chip" data-q="nobill" onclick="quick(this,'nobill')">THIẾU BILL</button>
+      <button class="chip" data-q="unpaid" onclick="quick(this,'unpaid')">CHƯA THANH TOÁN</button>
+    </div>
+    <div class="table-wrap"><table id="expenseTable"></table></div>
+  </section>
+  <section id="summaryView" class="hidden"></section>
+</main>
+</div>
+
+<div id="modalBg" class="modal-bg"><div class="modal" id="modal"></div></div>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const KEY='production_cost_manager_v1';
+const defaultCats=['Tiền ăn cho agency','Vé xe cho agency - client','Khách sạn phát sinh','Prelight','Tiền chi cho team đạo diễn','Tiền di chuyển của team SX','Tiền ăn uống team only SX (I)','Tiền ăn uống team keycrew (II)','Tiền in ấn + giặt đồ + ship'];
+let db=JSON.parse(localStorage.getItem(KEY)||'{"jobs":[]}'), current=null, quickFilter='', editingId=null;
+
+const money=n=>new Intl.NumberFormat('vi-VN').format(Number(n)||0)+' ₫';
+const save=()=>localStorage.setItem(KEY,JSON.stringify(db));
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const toast=m=>{let t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)};
+function showCreate(){openModal(`<h2>Tạo Job mới</h2><div class="form-grid">
+<div class="full"><div class="label">Tên Job</div><input id="fJobName" class="field" style="width:100%" placeholder="Ví dụ: TVC ABC 2026"></div>
+<div><div class="label">Client</div><input id="fClient" class="field" style="width:100%" placeholder="Client"></div>
+<div><div class="label">Production House</div><input id="fHouse" class="field" style="width:100%" placeholder="Production House"></div>
+<div><div class="label">Ngày bắt đầu</div><input id="fStart" type="date" class="field" style="width:100%"></div>
+<div><div class="label">Ngày kết thúc</div><input id="fEnd" type="date" class="field" style="width:100%"></div>
+</div><div class="actions"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn primary" onclick="createJob()">Tạo Job</button></div>`)}
+function createJob(){
+ let name=fJobName.value.trim();
+ if(!name)return toast('Vui lòng nhập Tên Job');
+ current={id:crypto.randomUUID(),name,client:fClient.value.trim(),house:fHouse.value.trim(),code:'',pass:'',categories:defaultCats.map((n,i)=>({id:crypto.randomUUID(),name:n,sort:i})),expenses:[]};
+ db.jobs.push(current);save();closeModal();enter(current);toast('Đã tạo Job');
+}
+function enter(j){current=j;login.classList.add('hidden');app.classList.remove('hidden');renderAll()}
+function logout(){current=null;app.classList.add('hidden');login.classList.remove('hidden');renderJobs()} 
+function renderJobs(){
+  const list=document.getElementById('jobList');
+  if(!db.jobs.length){
+    list.innerHTML='<div class="empty" style="border:1px dashed var(--line);border-radius:12px;margin-top:16px">Chưa có Job nào.<br>Hãy tạo Job đầu tiên để bắt đầu.</div>';
+    return;
+  }
+  list.innerHTML=db.jobs.map(j=>{
+    const total=j.expenses.reduce((s,e)=>s+e.total,0);
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:15px;margin:9px 0;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div><div style="font-size:17px;font-weight:800">${esc(j.name)}</div>
+      <div class="sub">${esc(j.client||'Chưa có Client')} · ${j.expenses.length} khoản chi · Tổng ${money(total)}</div></div>
+      <button class="btn primary" onclick="enter(db.jobs.find(x=>x.id==='${j.id}'))">Mở Job</button>
+    </div>`;
+  }).join('');
+}
+
+function renderAll(){jobName.textContent=current.name;jobMeta.textContent=[current.client,current.house].filter(Boolean).join(' · ');populateFilters();renderStats();renderTable()}
+function populateFilters(){let cats=[...current.categories].sort((a,b)=>a.sort-b.sort),people=[...new Set(current.expenses.map(e=>e.createdBy).filter(Boolean))];filterCat.innerHTML='<option value="">Danh mục</option>'+cats.map(c=>`<option>${esc(c.name)}</option>`).join('');let old=filterPerson.value;filterPerson.innerHTML='<option value="">Người nhập</option>'+people.map(p=>`<option>${esc(p)}</option>`).join('');filterPerson.value=old}
+function renderStats(){let es=current.expenses,total=es.reduce((s,e)=>s+e.total,0),vat=es.reduce((s,e)=>s+e.vat,0),withVat=es.filter(e=>e.vatStatus==='Có VAT').reduce((s,e)=>s+e.total,0),without=es.filter(e=>e.vatStatus==='Không VAT').reduce((s,e)=>s+e.total,0),missing=es.filter(e=>!e.invoiceType||!e.bill?.length).length;stats.innerHTML=[['TỔNG CHI',money(total),'orange'],['CÓ VAT',money(withVat),''],['KHÔNG VAT',money(without),''],['TỔNG VAT',money(vat),''],['THIẾU CHỨNG TỪ',missing,'']].map(x=>`<div class="stat ${x[2]}"><small>${x[0]}</small><strong>${x[1]}</strong></div>`).join('')}
+function filtered(){let s=search.value.toLowerCase(),cat=filterCat.value,p=filterPerson.value,v=filterVat.value,inv=filterInvoice.value;return current.expenses.filter(e=>{let text=(e.desc+' '+e.category+' '+e.createdBy+' '+(e.supplier||'')).toLowerCase();if(s&&!text.includes(s))return false;if(cat&&e.category!==cat)return false;if(p&&e.createdBy!==p)return false;if(v&&e.vatStatus!==v)return false;if(inv==='vat'&&e.invoiceType!=='vat')return false;if(inv==='nonvat'&&e.invoiceType!=='nonvat')return false;if(inv==='missing'&&e.invoiceType)return false;if(quickFilter==='vat'&&e.vatStatus!=='Có VAT')return false;if(quickFilter==='nonvat'&&e.vatStatus!=='Không VAT')return false;if(quickFilter==='missingInvoice'&&e.invoiceType)return false;if(quickFilter==='bill'&&!e.bill?.length)return false;if(quickFilter==='nobill'&&e.bill?.length)return false;if(quickFilter==='unpaid'&&e.paymentStatus==='Đã thanh toán')return false;return true})}
+function quick(el,q){document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));el.classList.add('active');quickFilter=q;renderTable()}
+function renderTable(){let es=filtered(),group=groupBy.value,cats=[...current.categories].sort((a,b)=>a.sort-b.sort),rows=[];if(group==='none')rows=es.map((e,i)=>expenseRow(e,i+1));else{let groups=[...new Set(es.map(e=>group==='category'?e.category:e.createdBy||'Chưa xác định'))];groups.forEach(g=>{let ge=es.filter(e=>(group==='category'?e.category:e.createdBy||'Chưa xác định')===g),sum=ge.reduce((s,e)=>s+e.total,0);rows.push(`<tr class="group"><td colspan="4"><span class="gname">${esc(g)}</span></td><td colspan="6">${money(sum)}</td></tr>`);ge.forEach((e,i)=>rows.push(expenseRow(e,i+1)))})}
+let total=es.reduce((s,e)=>s+e.total,0),vat=es.reduce((s,e)=>s+e.vat,0);
+expenseTable.innerHTML=`<thead><tr><th>STT</th><th>Ngày</th><th>Diễn giải</th><th>Số tiền</th><th>Bill</th><th>VAT</th><th>Link</th><th>Hóa đơn có VAT</th><th>Hóa đơn không VAT</th><th>Người nhập</th></tr></thead><tbody>${rows.join('')||'<tr><td colspan="10" class="empty">Chưa có khoản chi phù hợp.</td></tr>'}<tr class="footer-total"><td colspan="3">TỔNG HIỂN THỊ</td><td class="money">${money(total)}</td><td></td><td class="money">${money(vat)}</td><td colspan="4"></td></tr></tbody>`}
+function expenseRow(e,n){let bill=e.bill?.length?`<div class="thumbs">${e.bill.slice(0,3).map((x,i)=>`<img class="thumb" src="${x}" onclick="preview('${e.id}',${i})">`).join('')}${e.bill.length>3?`<span>+${e.bill.length-3}</span>`:''}</div>`:'<span class="badge bad">Thiếu</span>';return `<tr>
+<td>${n}</td><td><input class="cell-input" type="date" value="${e.date}" onchange="updateExp('${e.id}','date',this.value)"></td>
+<td><input class="cell-input" value="${esc(e.desc)}" onchange="updateExp('${e.id}','desc',this.value)"><div style="font-size:10px;color:#a3a3a3;padding:0 5px">${esc(e.category)}</div></td>
+<td><input class="cell-input money" type="number" value="${e.total}" onchange="updateMoney('${e.id}',this.value)"></td>
+<td>${bill} <button class="btn" style="padding:4px 7px" onclick="addBill('${e.id}')">+</button></td>
+<td><span class="badge ${e.vatStatus==='Có VAT'?'ok':e.vatStatus==='Không VAT'?'warn':'muted'}">${esc(e.vatStatus)}</span><div class="money" style="font-size:11px">${money(e.vat)}</div></td>
+<td>${e.link?`<a class="link" href="${esc(e.link)}" target="_blank">🔗 Mở link</a>`:'—'}</td>
+<td style="text-align:center">${e.invoiceType==='vat'?'<span class="badge ok">✓ Có</span>':e.invoiceType?'':'<span class="badge bad">Thiếu</span>'}</td>
+<td style="text-align:center">${e.invoiceType==='nonvat'?'<span class="badge ok">✓ Có</span>':e.invoiceType?'':'<span class="badge bad">Thiếu</span>'}</td>
+<td>${esc(e.createdBy||'—')}</td></tr>`}
+function updateExp(id,key,val){let e=current.expenses.find(x=>x.id===id);if(e){e[key]=val;e.updatedAt=new Date().toISOString();save();renderStats();populateFilters();toast('Đã lưu')}}
+function updateMoney(id,val){let e=current.expenses.find(x=>x.id===id);if(!e)return;e.total=Number(val)||0;if(e.vatStatus==='Có VAT')e.vat=e.vatIncluded?Math.round(e.total-(e.total/(1+(e.vatRate||10)/100))):Math.round(e.total*(e.vatRate||10)/100);else e.vat=0;save();renderStats();renderTable()}
+function newExpense(){openModal(`<h2>Thêm khoản chi</h2><div class="form-grid">
+<div><div class="label">Ngày</div><input id="eDate" type="date" class="field" style="width:100%" value="${new Date().toISOString().slice(0,10)}"></div>
+<div><div class="label">Danh mục</div><select id="eCat" class="field" style="width:100%">${current.categories.sort((a,b)=>a.sort-b.sort).map(c=>`<option>${esc(c.name)}</option>`).join('')}</select></div>
+<div class="full"><div class="label">Diễn giải</div><input id="eDesc" class="field" style="width:100%" placeholder="Ví dụ: Grab chở thiết bị..."></div>
+<div><div class="label">Số tiền</div><input id="eTotal" type="number" class="field" style="width:100%" placeholder="0"></div>
+<div><div class="label">VAT</div><select id="eVatStatus" class="field" style="width:100%" onchange="toggleVat()"><option>Có VAT</option><option>Không VAT</option><option>Chưa xác định</option></select></div>
+<div id="vatRateBox"><div class="label">VAT %</div><select id="eRate" class="field" style="width:100%"><option value="8">8%</option><option value="10" selected>10%</option></select></div>
+<div><div class="label">Thanh toán</div><select id="ePay" class="field" style="width:100%"><option>Đã thanh toán</option><option>Chưa thanh toán</option><option>Chờ hoàn ứng</option><option>Đã hoàn ứng</option></select></div>
+<div><div class="label">Người nhập</div><input id="ePerson" class="field" style="width:100%" placeholder="Tên người nhập"></div>
+<div class="full"><div class="label">Link</div><input id="eLink" class="field" style="width:100%" placeholder="https://..."></div>
+<div class="full"><div class="label">Bill / Hóa đơn</div><div id="drop" class="drop" onclick="eFiles.click()">Kéo thả ảnh/PDF hoặc bấm để upload<br><small>Có thể paste screenshot bằng Ctrl + V sau khi chọn vùng này.</small></div><input id="eFiles" type="file" multiple accept="image/*,.pdf" class="hidden" onchange="readFiles(this.files)"><div id="previews" class="preview-grid"></div></div>
+</div><div class="actions"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn primary" onclick="saveExpense()">Lưu khoản chi</button></div>`);window._uploads=[];setTimeout(()=>document.getElementById('drop').addEventListener('paste',pasteFiles),30)}
+function toggleVat(){vatRateBox.classList.toggle('hidden',eVatStatus.value!=='Có VAT')}
+function pasteFiles(ev){let items=[...(ev.clipboardData?.items||[])];items.forEach(i=>{if(i.type.startsWith('image/')){let f=i.getAsFile();readFiles([f])}})}
+function readFiles(files){[...files].forEach(f=>{let r=new FileReader();r.onload=()=>{window._uploads.push({name:f.name,type:f.type,data:r.result});if(f.type.startsWith('image/'))previews.innerHTML+=`<img src="${r.result}">`;else previews.innerHTML+=`<div class="badge ok">${esc(f.name)}</div>`};r.readAsDataURL(f)})}
+function saveExpense(){let total=Number(eTotal.value)||0,status=eVatStatus.value,rate=Number(eRate.value)||10,vat=status==='Có VAT'?(Math.round((eTotal.value||0)*(rate/100))):0;let e={id:crypto.randomUUID(),date:eDate.value,category:eCat.value,desc:eDesc.value,total,vat,vatStatus:status,vatRate:rate,vatIncluded:false,paymentStatus:ePay.value,createdBy:ePerson.value.trim()||'Người dùng',link:eLink.value.trim(),bill:window._uploads.map(x=>x.data),invoiceType:status==='Có VAT'?'vat':status==='Không VAT'?'nonvat':'',createdAt:new Date().toISOString()};current.expenses.push(e);save();closeModal();renderAll();toast('Đã thêm khoản chi')}
+function addBill(id){let input=document.createElement('input');input.type='file';input.multiple=true;input.accept='image/*,.pdf';input.onchange=()=>{[...input.files].forEach(f=>{let r=new FileReader();r.onload=()=>{let e=current.expenses.find(x=>x.id===id);e.bill=e.bill||[];e.bill.push(r.result);save();renderTable();renderStats();toast('Đã upload bill')}};r.readAsDataURL(f)})};input.click()}
+function preview(id,i){let e=current.expenses.find(x=>x.id===id),src=e.bill[i];openModal(`<h2>Chứng từ</h2><div style="text-align:center">${src.startsWith('data:image')?`<img src="${src}" style="max-width:100%;max-height:70vh;border-radius:8px">`:`<div class="drop">File PDF / tài liệu đã được lưu cho khoản chi này.</div>`}</div><div class="actions"><button class="btn" onclick="closeModal()">Đóng</button></div>`)}
+function showSettings(){openModal(`<h2>Cài đặt Job</h2><div class="form-grid"><div class="full"><div class="label">Tên Job</div><input id="sName" class="field" style="width:100%" value="${esc(current.name)}"></div><div><div class="label">Client</div><input id="sClient" class="field" style="width:100%" value="${esc(current.client||'')}"></div><div><div class="label">Production House</div><input id="sHouse" class="field" style="width:100%" value="${esc(current.house||'')}"></div><div class="full"><div class="label">Quản lý danh mục</div><div id="catManage">${current.categories.sort((a,b)=>a.sort-b.sort).map(c=>`<div style="display:flex;gap:6px;margin:5px 0"><input class="field" style="flex:1" value="${esc(c.name)}" data-cat="${c.id}"><button class="btn" onclick="deleteCat('${c.id}')">Xóa</button></div>`).join('')}</div><button class="btn" onclick="addCat()">+ Thêm danh mục</button></div></div><div class="actions"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn primary" onclick="saveSettings()">Lưu thay đổi</button></div>`)}
+function addCat(){current.categories.push({id:crypto.randomUUID(),name:'Danh mục mới',sort:current.categories.length});showSettings()}
+function deleteCat(id){if(current.expenses.some(e=>e.category===current.categories.find(c=>c.id===id)?.name))return toast('Không thể xóa category đang có khoản chi');current.categories=current.categories.filter(c=>c.id!==id);save();showSettings()}
+function saveSettings(){current.name=sName.value.trim()||current.name;current.client=sClient.value.trim();current.house=sHouse.value.trim();document.querySelectorAll('[data-cat]').forEach(i=>{let c=current.categories.find(x=>x.id===i.dataset.cat);if(c)c.name=i.value.trim()||c.name});save();closeModal();renderAll();toast('Đã lưu cài đặt')}
+function switchTab(t){tabExpenses.classList.toggle('active',t==='expenses');tabSummary.classList.toggle('active',t==='summary');expenseView.classList.toggle('hidden',t!=='expenses');summaryView.classList.toggle('hidden',t!=='summary');if(t==='summary')renderSummary()}
+function renderSummary(){let cats=[...current.categories].sort((a,b)=>a.sort-b.sort),rows=cats.map(c=>{let es=current.expenses.filter(e=>e.category===c.name),tot=es.reduce((s,e)=>s+e.total,0),vat=es.reduce((s,e)=>s+e.vat,0);return `<tr><td>${esc(c.name)}</td><td class="money">${money(tot)}</td><td class="money">${money(vat)}</td><td>${es.length}</td></tr>`}).join('');let total=current.expenses.reduce((s,e)=>s+e.total,0),vat=current.expenses.reduce((s,e)=>s+e.vat,0);summaryView.innerHTML=`<div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px"><h2 style="margin-top:0">Tổng hợp Job</h2><table style="min-width:700px"><thead><tr><th>Danh mục</th><th>Tổng chi</th><th>VAT</th><th>Số khoản</th></tr></thead><tbody>${rows}</tbody><tfoot><tr class="footer-total"><td>TỔNG JOB</td><td class="money">${money(total)}</td><td class="money">${money(vat)}</td><td>${current.expenses.length}</td></tr></tfoot></table></div>`}
+function exportExcel(){if(typeof XLSX==='undefined')return toast('Không tải được thư viện Excel. Hãy mở web khi có Internet.');let es=filtered(),data=es.map((e,i)=>({'STT':i+1,'Ngày':e.date,'Diễn giải':e.desc,'Danh mục':e.category,'Số tiền':e.total,'VAT':e.vat,'Trạng thái VAT':e.vatStatus,'Link':e.link,'Hóa đơn có VAT':e.invoiceType==='vat'?'Có':'','Hóa đơn không VAT':e.invoiceType==='nonvat'?'Có':'','Người nhập':e.createdBy,'Thanh toán':e.paymentStatus,'Số bill':e.bill?.length||0}));let ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:7},{wch:13},{wch:45},{wch:30},{wch:16},{wch:16},{wch:18},{wch:40},{wch:18},{wch:22},{wch:18},{wch:20},{wch:10}];ws['!autofilter']={ref:ws['!ref']};ws['!freeze']={xSplit:0,ySplit:1};let wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Chi tiết');let sum=[['JOB',current.name],['CLIENT',current.client],[],['TỔNG CHI',current.expenses.reduce((s,e)=>s+e.total,0)],['TỔNG VAT',current.expenses.reduce((s,e)=>s+e.vat,0)],['CÓ VAT',current.expenses.filter(e=>e.vatStatus==='Có VAT').reduce((s,e)=>s+e.total,0)],['KHÔNG VAT',current.expenses.filter(e=>e.vatStatus==='Không VAT').reduce((s,e)=>s+e.total,0)]];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sum),'Tổng hợp');XLSX.writeFile(wb,`${current.code}-${current.name.replace(/[\\\\/:*?"<>|]/g,'_')}.xlsx`);toast('Đã xuất Excel')}
+function openModal(html){modal.innerHTML=html;modalBg.style.display='flex'}function closeModal(){modalBg.style.display='none'}modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal()});
+document.addEventListener('paste',e=>{if(document.activeElement?.id==='drop')pasteFiles(e)});renderJobs();
+</script>
+</body>
+</html>
