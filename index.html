@@ -291,6 +291,12 @@ td.editable[contenteditable="true"]{box-shadow:inset 0 0 0 2px var(--accent);bac
 .cat-dd-row{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--ink);white-space:nowrap;}
 .cat-dd-row:hover{background:var(--surface-2);}
 .cat-dd-row.selected{background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}
+.cat-dd-addwrap{border-top:1px solid var(--border);margin-top:4px;padding-top:4px;}
+.cat-dd-addrow{color:var(--accent-strong);font-weight:600;}
+.cat-dd-addform{display:flex;gap:6px;padding:6px 8px;}
+.cat-dd-addinput{flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;}
+.cat-dd-addinput:focus{border-color:var(--accent);outline:none;}
+.cat-dd-addsubmit{white-space:nowrap;}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
 .badge-vat10{background:var(--accent-soft);color:var(--accent-strong);}
 .badge-vat8{background:var(--success-soft);color:var(--success);}
@@ -578,6 +584,37 @@ function ensureCategoryColors(jobId){
   });
   return changed;
 }
+/* Personnel migration, same pattern as ensureCategoryColors: if a job has
+   no Personnel list yet (a job created — or last touched — before this
+   feature existed) but already has expenses with non-empty created_by
+   names, seed the list from the DISTINCT names already in use
+   (first-seen order), each with its own color_slot, so existing data
+   populates the managed list without retyping. Also backfills color_slot
+   on any personnel entry that is somehow missing one (defensive, mirrors
+   the category migration). Returns true if anything changed. */
+function ensurePersonnelSeeded(jobId){
+  var changed = false;
+  var list = DB.personnel[jobId];
+  if(!list || !list.length){
+    var exps = DB.expenses[jobId]||[];
+    var seen = [];
+    exps.forEach(function(e){
+      var n = (e.created_by||'').trim();
+      if(n && seen.indexOf(n)===-1) seen.push(n);
+    });
+    if(seen.length){
+      DB.personnel[jobId] = seen.map(function(n,i){ return {id:uid(), job_id:jobId, name:n, sort_order:i, color_slot:i%CAT_PALETTE.length}; });
+      changed = true;
+    }
+    list = DB.personnel[jobId];
+  }
+  if(list && list.length){
+    list.forEach(function(p,i){
+      if(p.color_slot===undefined || p.color_slot===null){ p.color_slot = i%CAT_PALETTE.length; changed = true; }
+    });
+  }
+  return changed;
+}
 /* small fixed avatar-color list for per-user presence colors */
 var USER_COLORS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
 function userColor(name){
@@ -622,7 +659,7 @@ var LS_KEY = 'pc_db_v1';
 var LS_USER_KEY = 'pc_user_v1';
 var LS_THEME_KEY = 'pc_theme_v1';
 
-var DB = { jobs:[], categories:{}, expenses:{}, logs:{} };
+var DB = { jobs:[], categories:{}, personnel:{}, expenses:{}, logs:{} };
 
 function loadDB(){
   try{
@@ -631,12 +668,17 @@ function loadDB(){
   }catch(e){ console.error('DB load failed',e); }
   DB.jobs = DB.jobs || [];
   DB.categories = DB.categories || {};
+  DB.personnel = DB.personnel || {};
   DB.expenses = DB.expenses || {};
   DB.logs = DB.logs || {};
   // Backfill color_slot on categories saved before the color feature
-  // existed (see ensureCategoryColors) — persist once if anything changed.
+  // existed, and seed the Personnel list from existing created_by values
+  // for jobs saved before that feature existed — persist once if changed.
   var migrated = false;
-  DB.jobs.forEach(function(job){ if(ensureCategoryColors(job.id)) migrated = true; });
+  DB.jobs.forEach(function(job){
+    if(ensureCategoryColors(job.id)) migrated = true;
+    if(ensurePersonnelSeeded(job.id)) migrated = true;
+  });
   if(migrated) saveDBNow();
 }
 var saveDB = debounce(function(){
@@ -848,12 +890,15 @@ var Cloud = (function(){
           budget:j.budget||0, start_date:j.start_date||'', end_date:j.end_date||'',
           created_at:j.created_at||nowISO(), updated_at:j.updated_at||nowISO() };
       });
-      jobs.forEach(function(j){ DB.categories[j.id] = (j.categories||[]).slice(); });
-      // Backfill color_slot for categories that came from a cloud doc
-      // written before the color feature existed, and push the fix back
-      // to the shared doc so every viewer gets it, not just this browser.
+      jobs.forEach(function(j){ DB.categories[j.id] = (j.categories||[]).slice(); DB.personnel[j.id] = (j.personnel||[]).slice(); });
+      // Backfill color_slot for categories, and seed/backfill the
+      // Personnel list, for data that came from a cloud doc written
+      // before those features existed — push the fix back to the shared
+      // doc so every viewer gets it, not just this browser.
       DB.jobs.forEach(function(job){
-        if(ensureCategoryColors(job.id)){
+        var changed = ensureCategoryColors(job.id);
+        if(ensurePersonnelSeeded(job.id)) changed = true;
+        if(changed){
           saveDBNow();
           saveJob(job);
         }
@@ -883,6 +928,11 @@ var Cloud = (function(){
     if(!active()) return;
     unsubExpenses = dbNS.collection('jobs/'+jobId+'/expenses').onSnapshot(function(qs){
       DB.expenses[jobId] = qs.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      // Now that real expense data is in for this job, re-check the
+      // personnel seed migration (it needs created_by values to seed
+      // from, which aren't available until expenses load).
+      var job = DB.jobs.find(function(j){return j.id===jobId;});
+      if(job && ensurePersonnelSeeded(jobId)){ saveDBNow(); saveJob(job); }
       if(S.route==='job' && S.jobId===jobId && (S.tab==='table')){
         var v=document.getElementById('jobView'); if(v) renderTableTab(v);
       } else if(S.route==='job' && S.jobId===jobId && S.tab==='summary'){
@@ -906,7 +956,8 @@ var Cloud = (function(){
     var body = {
       name:job.name||'', client:job.client||'', production_house:job.production_house||'',
       budget:job.budget||0, start_date:job.start_date||'', end_date:job.end_date||'',
-      categories: DB.categories[job.id]||[], created_at:job.created_at||nowISO(), updated_at:job.updated_at||nowISO()
+      categories: DB.categories[job.id]||[], personnel: DB.personnel[job.id]||[],
+      created_at:job.created_at||nowISO(), updated_at:job.updated_at||nowISO()
     };
     return dbNS.doc('jobs/'+job.id).set(body).catch(function(e){ console.warn('saveJob failed',e); toast('Đồng bộ thất bại, thử lại sau','⚠️'); });
   }
@@ -1119,13 +1170,26 @@ var S = {
   groupBy: 'none', // none | category | payer
   sortKey: 'date', sortDir: 'asc',
   attCache: {}, // expense_id -> attachments, loaded lazily for current job
+  summaryPersonFilter: '', // personnel id, Summary-tab-only filter (in-memory, independent of filters.payer)
 };
 
 function currentJob(){ return DB.jobs.find(function(j){return j.id===S.jobId;}); }
 function currentCategories(){ return (DB.categories[S.jobId]||[]).slice().sort(function(a,b){return a.sort_order-b.sort_order;}); }
+function currentPersonnel(){ return (DB.personnel[S.jobId]||[]).slice().sort(function(a,b){return a.sort_order-b.sort_order;}); }
 function currentExpenses(){ return DB.expenses[S.jobId]||[]; }
 function catName(id){ var c=(DB.categories[S.jobId]||[]).find(function(x){return x.id===id;}); return c?c.name:'(Không danh mục)'; }
 function catColorById(id){ var c=(DB.categories[S.jobId]||[]).find(function(x){return x.id===id;}); return c?catColor(c.color_slot):'var(--ink-faint)'; }
+function personName(id){ var p=(DB.personnel[S.jobId]||[]).find(function(x){return x.id===id;}); return p?p.name:''; }
+function personColorById(id){ var p=(DB.personnel[S.jobId]||[]).find(function(x){return x.id===id;}); return p?catColor(p.color_slot):'var(--ink-faint)'; }
+/* Finds a personnel entry by NAME (case-insensitive) within a job — used
+   to resolve a legacy free-text created_by string to a picker id. */
+function personIdByName(jobId, name){
+  if(!name) return '';
+  var list = DB.personnel[jobId]||[];
+  var lower = String(name).trim().toLowerCase();
+  var p = list.find(function(x){ return String(x.name).trim().toLowerCase()===lower; });
+  return p ? p.id : '';
+}
 
 /* ======================================================================
    DEMO DATA SEED
@@ -1176,6 +1240,7 @@ function seedDemoIfEmpty(){
     {id:uid(),user:'Hân Ngô',action:'upload bill cho khoản "Khách sạn phát sinh thêm 1 đêm cho đạo diễn"',entity_id:null,created_at:nowISO()},
     {id:uid(),user:'Vân Anh',action:'đã thêm khoản chi "Tiền Grab đi shooting day 1" — '+fmtVND(85000),entity_id:null,created_at:nowISO()}
   ];
+  ensurePersonnelSeeded(jobId); // populates the Personnel list from the demo expenses' created_by names
   saveDBNow();
 }
 
@@ -1263,6 +1328,9 @@ function requireUser(action){
   if(getUser()){ action(); return; }
   openUserModal(function(){ action(); });
 }
+function requireUserPromise(){
+  return new Promise(function(resolve){ requireUser(function(){ resolve(); }); });
+}
 function themeIcon(){ return (document.documentElement.getAttribute('data-theme')==='dark') ? '☀️' : '🌙'; }
 function toggleTheme(){
   var cur = document.documentElement.getAttribute('data-theme');
@@ -1296,6 +1364,7 @@ function openNewJobModal(){
         created_at:nowISO(), updated_at:nowISO()
       });
       DB.categories[jobId] = defaultCategoryNames().map(function(n,i){ return {id:uid(),job_id:jobId,name:n,sort_order:i,color_slot:i%8}; });
+      DB.personnel[jobId] = []; // brand-new job, no expenses yet — starts empty
       DB.expenses[jobId] = [];
       DB.logs[jobId] = [{id:uid(),user:getUser()||'Ẩn danh',action:'đã tạo Job "'+name+'"',entity_id:null,created_at:nowISO()}];
       saveDBNow();
@@ -1313,8 +1382,11 @@ function openJob(id){
   S.jobId = id; S.route='job'; S.tab='table';
   S.filters = { q:'', category:'', payer:'', vat:'', invoice:'', payment:'', quick:'all', dateFrom:'', dateTo:'' };
   // Defensive backstop: make sure this job's categories always have a
-  // color_slot before we render anything for it, however they got here.
-  if(ensureCategoryColors(id)){
+  // color_slot, and its Personnel list is seeded, before we render
+  // anything for it, however the data got here.
+  var needsMigration = ensureCategoryColors(id);
+  if(ensurePersonnelSeeded(id)) needsMigration = true;
+  if(needsMigration){
     saveDBNow();
     if(Cloud.active()) Cloud.saveJob(currentJob());
   }
@@ -1438,7 +1510,7 @@ function renderTableTab(view){
 }
 
 function doRenderTable(view){
-  closeCatDropdown(); // avoid an orphaned floating panel across a re-render
+  closeColorDropdown(); // avoid an orphaned floating panel across a re-render
   var job = currentJob();
   var cats = currentCategories();
   var filtered = getFilteredExpenses();
@@ -1446,8 +1518,6 @@ function doRenderTable(view){
   var totalAll = computeTotals(allExps);
   var totalFiltered = computeTotals(filtered);
   var isFiltered = JSON.stringify(S.filters)!==JSON.stringify({ q:'', category:'', payer:'', vat:'', invoice:'', payment:'', quick:'all', dateFrom:'', dateTo:'' });
-  var payers = Array.from(new Set(allExps.map(function(e){return e.created_by;}).filter(Boolean))).sort();
-
   var html = '';
   html += '<div class="summary-bar">'+
     sumCard('Tổng chi', fmtVND(isFiltered?totalFiltered.total:totalAll.total), isFiltered?'accent':'')+
@@ -1466,8 +1536,8 @@ function doRenderTable(view){
     '<input type="text" id="fSearch" placeholder="Tìm diễn giải, danh mục, người nhập, số tiền…" value="'+escapeHtml(S.filters.q)+'"></div>'+
     '<button class="btn btn-filtertoggle" id="btnMobileFilter">🔎 Bộ lọc'+(activeFilterCount?' <span class="filter-count">'+activeFilterCount+'</span>':'')+'</button>'+
     '<div class="filter-selects">'+
-    renderCatDropdown('fCategory', S.filters.category, catDropdownItems('Tất cả danh mục'))+
-    selectFilter('fPayer','Người nhập',S.filters.payer, [['','Tất cả người nhập']].concat(payers.map(function(p){return [p,p];})))+
+    renderColorDropdown('fCategory', S.filters.category, catDropdownItems('Tất cả danh mục'))+
+    renderColorDropdown('fPayer', personIdByName(S.jobId,S.filters.payer), personDropdownItems('Tất cả người nhập'))+
     selectFilter('fVat','VAT',S.filters.vat, [['','Tất cả VAT'],['has','Có VAT'],['none','Không VAT'],['unknown','Chưa xác định']])+
     selectFilter('fInvoice','Hóa đơn',S.filters.invoice, [['','Tất cả hóa đơn'],['has_vat','Có hóa đơn VAT'],['has_novat','Có hóa đơn thường'],['missing','Thiếu hóa đơn']])+
     selectFilter('fPayment','Thanh toán',S.filters.payment, [['','Tất cả thanh toán'],['paid','Đã thanh toán'],['unpaid','Chưa thanh toán'],['pending','Đang chờ']])+
@@ -1526,28 +1596,31 @@ function selectFilter(id,label,val,options){
 }
 
 /* ======================================================================
-   CATEGORY DROPDOWN — reusable custom picker (div-based, not a native
-   <select>) so the per-category color swatch renders identically on every
-   device, including mobile browsers that ignore <option style="color:">.
-   One helper pair used everywhere a category is picked: the toolbar
-   filter, the mobile filter drawer, the table-row inline editor, the
-   full expense modal and Quick Add.
+   COLOR DROPDOWN — generic reusable custom picker (div-based, not a
+   native <select>) so a per-item color swatch renders identically on
+   every device, including mobile browsers that ignore
+   <option style="color:">. Used for BOTH the category picker and the
+   personnel picker (independent color dimensions, same shared mechanics):
+   panel creation, viewport-clamped positioning, outside-click/Escape to
+   close, and an optional inline "add new…" row live here ONCE so the
+   positioning logic (previously a real viewport-overflow bug) only
+   exists in one place.
 ====================================================================== */
-var catDdOpenPanel = null, catDdOpenTrigger = null;
-function closeCatDropdown(){
-  if(catDdOpenPanel){ catDdOpenPanel.remove(); catDdOpenPanel=null; }
-  if(catDdOpenTrigger){ catDdOpenTrigger.classList.remove('open'); catDdOpenTrigger=null; }
-  document.removeEventListener('keydown', catDdEscHandler);
-  document.removeEventListener('click', catDdOutsideHandler, true);
+var colorDdOpenPanel = null, colorDdOpenTrigger = null;
+function closeColorDropdown(){
+  if(colorDdOpenPanel){ colorDdOpenPanel.remove(); colorDdOpenPanel=null; }
+  if(colorDdOpenTrigger){ colorDdOpenTrigger.classList.remove('open'); colorDdOpenTrigger=null; }
+  document.removeEventListener('keydown', colorDdEscHandler);
+  document.removeEventListener('click', colorDdOutsideHandler, true);
 }
-function catDdEscHandler(ev){ if(ev.key==='Escape') closeCatDropdown(); }
-function catDdOutsideHandler(ev){
-  if(catDdOpenPanel && catDdOpenTrigger && !catDdOpenPanel.contains(ev.target) && !catDdOpenTrigger.contains(ev.target)){
-    closeCatDropdown();
+function colorDdEscHandler(ev){ if(ev.key==='Escape') closeColorDropdown(); }
+function colorDdOutsideHandler(ev){
+  if(colorDdOpenPanel && colorDdOpenTrigger && !colorDdOpenPanel.contains(ev.target) && !colorDdOpenTrigger.contains(ev.target)){
+    closeColorDropdown();
   }
 }
 /* items: [{id,name,color}] — color may be null (renders an ink-faint dot). */
-function renderCatDropdown(idPrefix, selectedId, items, opts){
+function renderColorDropdown(idPrefix, selectedId, items, opts){
   opts = opts||{};
   var sel = items.find(function(it){return it.id===(selectedId||'');}) || items[0] || {id:'',name:'—',color:null};
   var extraClass = opts.extraClass||'';
@@ -1562,53 +1635,100 @@ function renderCatDropdown(idPrefix, selectedId, items, opts){
 }
 /* Wires the trigger with `idPrefix` (must already be in the DOM); onChange
    receives the newly-picked id. Re-call after every re-render, same as
-   any other event binding in this app. */
-function bindCatDropdown(idPrefix, onChange){
+   any other event binding in this app.
+   opts.allowAdd: {label, onAdd(name)} — shows a "+ <label>…" row at the
+   bottom of the panel that reveals a small inline text input; submitting
+   it calls onAdd(name), which should create the item and return its new
+   id (or a promise resolving to it) so the picker can select it right
+   away without a trip to Settings. */
+function bindColorDropdown(idPrefix, onChange, opts){
   var trigger = document.getElementById(idPrefix);
   if(!trigger) return;
   trigger.addEventListener('click', function(ev){
     ev.stopPropagation();
-    if(catDdOpenTrigger===trigger){ closeCatDropdown(); return; }
-    closeCatDropdown();
-    openCatDropdownPanel(trigger, onChange);
+    if(colorDdOpenTrigger===trigger){ closeColorDropdown(); return; }
+    closeColorDropdown();
+    openColorDropdownPanel(trigger, onChange, opts||{});
   });
 }
-function openCatDropdownPanel(trigger, onChange){
+function openColorDropdownPanel(trigger, onChange, opts){
+  opts = opts||{};
   var items;
   try{ items = JSON.parse(trigger.getAttribute('data-items')||'[]'); }catch(e){ items=[]; }
   var selectedId = trigger.getAttribute('data-selected-id')||'';
   var panel = document.createElement('div');
   panel.className = 'cat-dd-panel';
-  panel.innerHTML = items.map(function(it){
-    return '<div class="cat-dd-row'+(it.id===selectedId?' selected':'')+'" data-value="'+escapeHtml(it.id)+'">'+
-      '<span class="cat-dd-dot" style="background:'+(it.color||'var(--ink-faint)')+';"></span>'+
-      '<span>'+escapeHtml(it.name)+'</span>'+
-    '</div>';
-  }).join('');
-  document.getElementById('overlays').appendChild(panel);
-  positionCatDdPanel(trigger, panel);
-  panel.querySelectorAll('.cat-dd-row').forEach(function(row){
-    row.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      var val = row.getAttribute('data-value');
-      var it = items.find(function(x){return x.id===val;}) || {id:val,name:'—',color:null};
-      trigger.setAttribute('data-selected-id', val);
-      trigger.querySelector('.cat-dd-dot').style.background = it.color||'var(--ink-faint)';
-      trigger.querySelector('.cat-dd-label').textContent = it.name;
-      closeCatDropdown();
-      onChange(val);
+  function rowsHtml(){
+    return items.map(function(it){
+      return '<div class="cat-dd-row'+(it.id===selectedId?' selected':'')+'" data-value="'+escapeHtml(it.id)+'">'+
+        '<span class="cat-dd-dot" style="background:'+(it.color||'var(--ink-faint)')+';"></span>'+
+        '<span>'+escapeHtml(it.name)+'</span>'+
+      '</div>';
+    }).join('');
+  }
+  function wireRows(){
+    panel.querySelectorAll('.cat-dd-row:not(.cat-dd-addrow)').forEach(function(row){
+      row.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        var val = row.getAttribute('data-value');
+        var it = items.find(function(x){return x.id===val;}) || {id:val,name:'—',color:null};
+        trigger.setAttribute('data-selected-id', val);
+        trigger.querySelector('.cat-dd-dot').style.background = it.color||'var(--ink-faint)';
+        trigger.querySelector('.cat-dd-label').textContent = it.name;
+        closeColorDropdown();
+        onChange(val);
+      });
     });
-  });
+  }
+  panel.innerHTML = rowsHtml();
+  if(opts.allowAdd){
+    var addWrap = document.createElement('div');
+    addWrap.className = 'cat-dd-addwrap';
+    addWrap.innerHTML = '<div class="cat-dd-row cat-dd-addrow" data-add-row="1"><span class="cat-dd-dot" style="background:transparent;border:1px dashed var(--ink-faint);"></span><span>+ '+escapeHtml(opts.allowAdd.label)+'…</span></div>'+
+      '<div class="cat-dd-addform" hidden><input type="text" class="cat-dd-addinput" placeholder="Tên…"><button type="button" class="btn btn-sm btn-primary cat-dd-addsubmit">Thêm</button></div>';
+    panel.appendChild(addWrap);
+    addWrap.querySelector('[data-add-row]').addEventListener('click', function(ev){
+      ev.stopPropagation();
+      addWrap.querySelector('[data-add-row]').hidden = true;
+      var form = addWrap.querySelector('.cat-dd-addform');
+      form.hidden = false;
+      var input = form.querySelector('.cat-dd-addinput');
+      input.focus();
+      input.addEventListener('keydown', function(kev){ if(kev.key==='Enter'){ kev.preventDefault(); submitAdd(); } });
+    });
+    addWrap.querySelector('.cat-dd-addsubmit').addEventListener('click', function(ev){ ev.stopPropagation(); submitAdd(); });
+    function submitAdd(){
+      var input = addWrap.querySelector('.cat-dd-addinput');
+      var name = (input.value||'').trim();
+      if(!name) return;
+      requireUser(function(){
+        Promise.resolve(opts.allowAdd.onAdd(name)).then(function(newId){
+          if(!newId) return;
+          items = opts.allowAdd.refreshItems ? opts.allowAdd.refreshItems() : items;
+          var it = items.find(function(x){return x.id===newId;}) || {id:newId,name:name,color:null};
+          trigger.setAttribute('data-items', escapeHtml(JSON.stringify(items)));
+          trigger.setAttribute('data-selected-id', newId);
+          trigger.querySelector('.cat-dd-dot').style.background = it.color||'var(--ink-faint)';
+          trigger.querySelector('.cat-dd-label').textContent = it.name;
+          closeColorDropdown();
+          onChange(newId);
+        });
+      });
+    }
+  }
+  document.getElementById('overlays').appendChild(panel);
+  positionColorPanel(trigger, panel);
+  wireRows();
+  colorDdOpenPanel = panel;
+  colorDdOpenTrigger = trigger;
   trigger.classList.add('open');
-  catDdOpenPanel = panel;
-  catDdOpenTrigger = trigger;
-  document.addEventListener('keydown', catDdEscHandler);
-  document.addEventListener('click', catDdOutsideHandler, true);
+  document.addEventListener('keydown', colorDdEscHandler);
+  document.addEventListener('click', colorDdOutsideHandler, true);
 }
-function positionCatDdPanel(trigger, panel){
+function positionColorPanel(trigger, panel){
   var r = trigger.getBoundingClientRect();
   var rowCount = panel.children.length||1;
-  var estHeight = Math.min(320, 12 + 38*rowCount);
+  var estHeight = Math.min(360, 12 + 38*rowCount);
   var maxW = Math.min(320, window.innerWidth-16);
   var panelWidth = Math.min(Math.max(r.width, 180), maxW);
   var top = r.bottom+4;
@@ -1628,6 +1748,23 @@ function catDropdownItems(placeholderLabel){
   var items = cats.map(function(c){ return {id:c.id, name:c.name, color:catColor(c.color_slot)}; });
   if(placeholderLabel!=null) items = [{id:'',name:placeholderLabel,color:null}].concat(items);
   return items;
+}
+/* Same, for the managed Personnel list. */
+function personDropdownItems(placeholderLabel){
+  var people = currentPersonnel();
+  var items = people.map(function(p){ return {id:p.id, name:p.name, color:catColor(p.color_slot)}; });
+  if(placeholderLabel!=null) items = [{id:'',name:placeholderLabel,color:null}].concat(items);
+  return items;
+}
+/* Adds a new person to the current job's personnel list, persists, and
+   returns the new id — used by the inline "+ Thêm nhân sự mới…" row. */
+function addPersonInline(name){
+  var list = DB.personnel[S.jobId] = DB.personnel[S.jobId]||[];
+  var p = {id:uid(), job_id:S.jobId, name:name, sort_order:list.length, color_slot:list.length%CAT_PALETTE.length};
+  list.push(p);
+  saveDBNow();
+  Cloud.saveJob(currentJob());
+  return p.id;
 }
 function quickChip(key,label,count){
   return '<div class="chip'+(S.filters.quick===key?' active':'')+'" data-quick="'+key+'">'+label+' <span class="n">('+count+')</span></div>';
@@ -1793,13 +1930,17 @@ function expenseRow(e,stt){
     '<td class="col-link">'+linkHtml+'</td>'+
     '<td class="col-inv">'+invVatCell+'</td>'+
     '<td class="col-inv">'+invNoCell+'</td>'+
-    '<td class="col-payer editable" contenteditable="true" data-field="created_by" data-id="'+e.id+'">'+escapeHtml(e.created_by||'')+'</td>'+
+    '<td class="col-payer">'+personSelect(e)+'</td>'+
     '<td class="col-status">'+paySelect(e)+'</td>'+
     '<td class="col-actions"><span class="rowmenu-btn" data-del-row="'+e.id+'" title="Xóa khoản chi">🗑</span></td>'+
   '</tr>';
 }
 function catSelect(e){
-  return renderCatDropdown('catdd_'+e.id, e.category_id, catDropdownItems('—'), {extraClass:'cat-dd-cell', extraAttr:'data-row-cat="'+e.id+'"'});
+  return renderColorDropdown('catdd_'+e.id, e.category_id, catDropdownItems('—'), {extraClass:'cat-dd-cell', extraAttr:'data-row-cat="'+e.id+'"'});
+}
+function personSelect(e){
+  var pid = personIdByName(S.jobId, e.created_by||'');
+  return renderColorDropdown('persondd_'+e.id, pid, personDropdownItems('—'), {extraClass:'cat-dd-cell', extraAttr:'data-row-person="'+e.id+'"'});
 }
 function paySelect(e){
   var opts = [['unpaid','Chưa TT'],['pending','Đang chờ'],['paid','Đã TT']];
@@ -1815,12 +1956,13 @@ function paySelect(e){
 function bindToolbarCommonEvents(view){
   var sEl;
   sEl=document.getElementById('fSearch'); if(sEl) sEl.addEventListener('input',debounce(function(){ S.filters.q=sEl.value; doRenderTable(view); },200));
-  bindSel('fPayer','payer'); bindSel('fVat','vat'); bindSel('fInvoice','invoice'); bindSel('fPayment','payment');
+  bindSel('fVat','vat'); bindSel('fInvoice','invoice'); bindSel('fPayment','payment');
   function bindSel(id,key){
     var el=document.getElementById(id);
     if(el) el.addEventListener('change',function(){ S.filters[key]=el.value; doRenderTable(view); });
   }
-  bindCatDropdown('fCategory', function(val){ S.filters.category=val; doRenderTable(view); });
+  bindColorDropdown('fCategory', function(val){ S.filters.category=val; doRenderTable(view); });
+  bindColorDropdown('fPayer', function(val){ S.filters.payer=personName(val)||''; doRenderTable(view); });
   var gEl = document.getElementById('fGroup');
   if(gEl) gEl.addEventListener('change',function(){ S.groupBy=gEl.value; doRenderTable(view); });
   var clrEl = document.getElementById('btnClearFilters');
@@ -1841,10 +1983,9 @@ function bindToolbarCommonEvents(view){
    viewports instead of the cramped inline select row. */
 function openMobileFilterSheet(view){
   var cats = currentCategories();
-  var payers = Array.from(new Set(currentExpenses().map(function(e){return e.created_by;}).filter(Boolean))).sort();
   var body =
-    '<div class="field"><label>Danh mục</label>'+renderCatDropdown('mfCategory', S.filters.category, catDropdownItems('Tất cả danh mục'), {extraClass:'cat-dd-field'})+'</div>'+
-    '<div class="field"><label>Người nhập</label>'+selectFilter('mfPayer','Người nhập',S.filters.payer, [['','Tất cả người nhập']].concat(payers.map(function(p){return [p,p];})),true)+'</div>'+
+    '<div class="field"><label>Danh mục</label>'+renderColorDropdown('mfCategory', S.filters.category, catDropdownItems('Tất cả danh mục'), {extraClass:'cat-dd-field'})+'</div>'+
+    '<div class="field"><label>Người nhập</label>'+renderColorDropdown('mfPayer', personIdByName(S.jobId,S.filters.payer), personDropdownItems('Tất cả người nhập'), {extraClass:'cat-dd-field'})+'</div>'+
     '<div class="field"><label>VAT</label>'+selectFilter('mfVat','VAT',S.filters.vat, [['','Tất cả VAT'],['has','Có VAT'],['none','Không VAT'],['unknown','Chưa xác định']],true)+'</div>'+
     '<div class="field"><label>Hóa đơn</label>'+selectFilter('mfInvoice','Hóa đơn',S.filters.invoice, [['','Tất cả hóa đơn'],['has_vat','Có hóa đơn VAT'],['has_novat','Có hóa đơn thường'],['missing','Thiếu hóa đơn']],true)+'</div>'+
     '<div class="field"><label>Thanh toán</label>'+selectFilter('mfPayment','Thanh toán',S.filters.payment, [['','Tất cả thanh toán'],['paid','Đã thanh toán'],['unpaid','Chưa thanh toán'],['pending','Đang chờ']],true)+'</div>'+
@@ -1853,7 +1994,7 @@ function openMobileFilterSheet(view){
     {label:'Xóa lọc',onClick:function(){ S.filters={ q:S.filters.q, category:'', payer:'', vat:'', invoice:'', payment:'', quick:'all', dateFrom:'', dateTo:'' }; S.groupBy='none'; closeModal(); doRenderTable(view); }},
     {label:'Áp dụng',primary:true,onClick:function(){
       S.filters.category = document.getElementById('mfCategory').getAttribute('data-selected-id')||'';
-      S.filters.payer = document.getElementById('mfPayer').value;
+      S.filters.payer = personName(document.getElementById('mfPayer').getAttribute('data-selected-id'))||'';
       S.filters.vat = document.getElementById('mfVat').value;
       S.filters.invoice = document.getElementById('mfInvoice').value;
       S.filters.payment = document.getElementById('mfPayment').value;
@@ -1862,7 +2003,8 @@ function openMobileFilterSheet(view){
       doRenderTable(view);
     }}
   ]);
-  bindCatDropdown('mfCategory', function(){});
+  bindColorDropdown('mfCategory', function(){});
+  bindColorDropdown('mfPayer', function(){});
 }
 function bindTableEvents(view){
   view.querySelectorAll('th[data-sort]').forEach(function(el){
@@ -1898,9 +2040,16 @@ function bindTableEvents(view){
   /* per-row category picker (custom dropdown, not a native select) */
   view.querySelectorAll('.cat-dd-trigger[data-row-cat]').forEach(function(trig){
     var id = trig.getAttribute('data-row-cat');
-    bindCatDropdown(trig.id, function(val){
+    bindColorDropdown(trig.id, function(val){
       requireUser(function(){ updateExpense(id, 'category_id', val); });
     });
+  });
+  /* per-row personnel picker (custom dropdown) */
+  view.querySelectorAll('.cat-dd-trigger[data-row-person]').forEach(function(trig){
+    var id = trig.getAttribute('data-row-person');
+    bindColorDropdown(trig.id, function(val){
+      requireUser(function(){ updateExpense(id, 'created_by', personName(val)||''); });
+    }, { allowAdd:{ label:'Thêm nhân sự mới', onAdd:function(name){ return addPersonInline(name); }, refreshItems:function(){ return personDropdownItems('—'); } } });
   });
   /* date field: swap to date input on focus for convenience */
   view.querySelectorAll('td[data-field="date"]').forEach(function(td){
@@ -2156,10 +2305,10 @@ function openExpenseModal(expenseId){
   Room.setPresence({editingId:e.id, editingField:'expense'});
   var body = collisionBanner +
     '<div class="field-row"><div class="field"><label>Ngày *</label><input type="date" id="em_date" value="'+e.date+'"></div>'+
-    '<div class="field"><label>Danh mục</label>'+renderCatDropdown('em_cat', e.category_id, catDropdownItems('—'), {extraClass:'cat-dd-field'})+'</div></div>'+
+    '<div class="field"><label>Danh mục</label>'+renderColorDropdown('em_cat', e.category_id, catDropdownItems('—'), {extraClass:'cat-dd-field'})+'</div></div>'+
     '<div class="field"><label>Diễn giải *</label><input type="text" id="em_desc" value="'+escapeHtml(e.description)+'" placeholder="VD: Tiền Grab đi shooting day 1"></div>'+
     '<div class="field-row"><div class="field"><label>Số tiền (₫) *</label><input type="text" inputmode="numeric" id="em_amount" value="'+(e.amount?e.amount:'')+'" placeholder="0"></div>'+
-    '<div class="field"><label>Người nhập</label><input type="text" id="em_payer" value="'+escapeHtml(e.created_by||'')+'" placeholder="Tên người nhập"></div></div>'+
+    '<div class="field"><label>Người nhập</label>'+renderColorDropdown('em_payer', personIdByName(S.jobId, e.created_by||getUser()||''), personDropdownItems('—'), {extraClass:'cat-dd-field'})+'</div></div>'+
     '<div class="field"><label>VAT</label><div class="seg" id="em_vatseg">'+segBtn('has','Có VAT',e.vat_status)+segBtn('none','Không VAT',e.vat_status)+segBtn('unknown','Chưa xác định',e.vat_status)+'</div></div>'+
     '<div id="em_vatdetail"></div>'+
     '<div class="field-row"><div class="field"><label>Thanh toán</label><select id="em_pay">'+
@@ -2191,7 +2340,8 @@ function openExpenseModal(expenseId){
     });
   });
   document.getElementById('em_amount').addEventListener('input',function(){ updateExpenseModalCalc(e); });
-  bindCatDropdown('em_cat', function(){});
+  bindColorDropdown('em_cat', function(){});
+  bindColorDropdown('em_payer', function(){}, { allowAdd:{ label:'Thêm nhân sự mới', onAdd:function(name){ return addPersonInline(name); }, refreshItems:function(){ return personDropdownItems('—'); } } });
 
   setupAttachmentUI(e, isEdit);
   setTimeout(function(){ var i=document.getElementById('em_desc'); if(i && !isEdit) {} var d=document.getElementById('em_date'); },30);
@@ -2263,7 +2413,7 @@ function saveExpenseModal(e,isEdit){
   e.link = document.getElementById('em_link').value.trim();
   e.invoice_vat = document.getElementById('em_invvat').checked;
   e.invoice_novat = document.getElementById('em_invnovat').checked;
-  e.created_by = document.getElementById('em_payer').value.trim()||getUser()||'Ẩn danh';
+  e.created_by = personName(document.getElementById('em_payer').getAttribute('data-selected-id'))||getUser()||'Ẩn danh';
   e.updated_by = getUser()||e.created_by;
   e.updated_at = nowISO();
   if(!isEdit){
@@ -2365,7 +2515,7 @@ function closeQuickAdd(){
   var el = document.getElementById('quickAddPop');
   if(el){ el.remove(); Room.setPresence({editingId:null}); }
   quickAddAtts = [];
-  closeCatDropdown();
+  closeColorDropdown();
   document.removeEventListener('keydown',quickAddEscHandler);
 }
 function quickAddEscHandler(ev){ if(ev.key==='Escape') closeQuickAdd(); }
@@ -2380,7 +2530,7 @@ function openQuickAdd(){
       '<div class="modal-title" style="font-size:14px;">⚡ Thêm nhanh</div><button class="iconbtn" id="qaClose">✕</button></div>'+
     '<div class="field"><label>Số tiền (₫) *</label><input type="text" inputmode="numeric" id="qa_amount" placeholder="0"></div>'+
     '<div class="field"><label>Diễn giải *</label><input type="text" id="qa_desc" placeholder="VD: Tiền Grab ra sân bay"></div>'+
-    '<div class="field"><label>Danh mục</label>'+renderCatDropdown('qa_cat', (cats[0]||{}).id||'', catDropdownItems(null), {extraClass:'cat-dd-field'})+'</div>'+
+    '<div class="field"><label>Danh mục</label>'+renderColorDropdown('qa_cat', (cats[0]||{}).id||'', catDropdownItems(null), {extraClass:'cat-dd-field'})+'</div>'+
     '<div class="field"><label>VAT</label><div class="seg" id="qa_vatseg">'+segBtn('none','Không VAT','none')+segBtn('has','Có VAT','none')+segBtn('unknown','Chưa rõ','none')+'</div></div>'+
     '<div class="field"><label>Bill</label><input type="file" id="qa_file" accept="image/*,application/pdf" multiple>'+
       '<div class="att-grid" id="qa_attgrid" style="margin-top:6px;"></div></div>'+
@@ -2388,7 +2538,7 @@ function openQuickAdd(){
   document.getElementById('overlays').appendChild(pop);
   document.getElementById('qaClose').addEventListener('click',closeQuickAdd);
   document.addEventListener('keydown',quickAddEscHandler);
-  bindCatDropdown('qa_cat', function(){});
+  bindColorDropdown('qa_cat', function(){});
   pop.querySelectorAll('#qa_vatseg [data-seg]').forEach(function(b){
     b.addEventListener('click',function(){ pop.querySelectorAll('#qa_vatseg [data-seg]').forEach(function(x){x.classList.toggle('active',x===b);}); });
   });
@@ -2528,8 +2678,12 @@ function renderCategoryDonut(catRows, total){
   return '<div class="donut-wrap">'+svg+legend+'</div>';
 }
 function renderSummaryTab(view){
-  var exps = currentExpenses();
+  closeColorDropdown();
+  var allExps = currentExpenses();
   var cats = currentCategories();
+  var selPersonId = S.summaryPersonFilter||'';
+  var selPersonName = selPersonId ? personName(selPersonId) : '';
+  var exps = selPersonId ? allExps.filter(function(e){ return (e.created_by||'')===selPersonName; }) : allExps;
   var t = computeTotals(exps);
   var byCat = {};
   cats.forEach(function(c){ byCat[c.id] = {name:c.name, total:0, vat:0, count:0, color:catColor(c.color_slot)}; });
@@ -2546,7 +2700,11 @@ function renderSummaryTab(view){
   var byPayer = {};
   exps.forEach(function(e){ var p=e.created_by||'(Chưa ghi)'; byPayer[p]=(byPayer[p]||0)+(Number(e.amount)||0); });
 
-  var html = '<div class="summary-bar">'+
+  var html = '<div class="panel" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'+
+    '<label style="font-size:12.5px;color:var(--ink-soft);font-weight:600;">Xem theo nhân sự</label>'+
+    renderColorDropdown('sumPersonFilter', selPersonId, personDropdownItems('Tất cả nhân sự'))+
+  '</div>';
+  html += '<div class="summary-bar">'+
     sumCard('Tổng chi', fmtVND(t.total),'accent')+
     sumCard('Có VAT', fmtVND(t.hasVat))+
     sumCard('Không VAT', fmtVND(t.noVat))+
@@ -2576,6 +2734,7 @@ function renderSummaryTab(view){
     '</tbody></table></div></div>';
 
   view.innerHTML = html;
+  bindColorDropdown('sumPersonFilter', function(val){ S.summaryPersonFilter = val||''; renderSummaryTab(view); });
 }
 
 /* ======================================================================
@@ -2602,6 +2761,7 @@ function renderActivityTab(view){
 function renderSettingsTab(view){
   var job = currentJob();
   var cats = currentCategories();
+  var people = currentPersonnel();
   var html = '<div class="grid2">'+
     '<div class="panel"><div class="panel-title">Thông tin Job</div>'+
       field('st_client','Client',job.client)+
@@ -2613,6 +2773,10 @@ function renderSettingsTab(view){
     '<div class="panel"><div class="panel-title">Quản lý Danh mục</div>'+
       '<div id="catList">'+cats.map(catManageRow).join('')+'</div>'+
       '<button class="btn btn-sm" id="btnAddCat" style="margin-top:8px;">+ Thêm danh mục</button>'+
+    '</div>'+
+    '<div class="panel"><div class="panel-title">Quản lý Nhân sự</div>'+
+      '<div id="personList">'+people.map(personManageRow).join('')+(people.length?'':'<p style="font-size:12.5px;color:var(--ink-faint);">Chưa có nhân sự nào — thêm tên để dùng trong bộ lọc "Người nhập".</p>')+'</div>'+
+      '<button class="btn btn-sm" id="btnAddPerson" style="margin-top:8px;">+ Thêm nhân sự</button>'+
     '</div>'+
   '</div>'+
   '<div class="panel"><div class="panel-title">Bảo vệ xóa</div>'+
@@ -2702,6 +2866,17 @@ function renderSettingsTab(view){
     });
   });
   wireCatManage(view);
+  document.getElementById('btnAddPerson').addEventListener('click',function(){
+    requireUser(function(){
+      var list = DB.personnel[S.jobId] = DB.personnel[S.jobId]||[];
+      list.push({id:uid(),job_id:S.jobId,name:'Nhân sự mới',sort_order:list.length,color_slot:list.length%CAT_PALETTE.length});
+      saveDBNow();
+      Cloud.saveJob(job);
+      renderSettingsTab(view);
+      setTimeout(function(){ var inputs=view.querySelectorAll('.person-manage-row input'); var last=inputs[inputs.length-1]; if(last){last.focus();last.select();} },20);
+    });
+  });
+  wirePersonManage(view);
   document.getElementById('btnClearExpenses').addEventListener('click',function(){
     requireDeletePassword(job, function(){
       openModal('Xóa toàn bộ khoản chi?','<p style="font-size:13.5px;color:var(--ink-soft);">Toàn bộ khoản chi và chứng từ của Job này sẽ bị xóa vĩnh viễn. Danh mục vẫn được giữ lại.</p>',
@@ -2724,7 +2899,7 @@ function renderSettingsTab(view){
           ids.forEach(function(id){ attDeleteAllForExpense(id); });
           Cloud.deleteJobCascade(job.id);
           DB.jobs = DB.jobs.filter(function(j){return j.id!==job.id;});
-          delete DB.categories[job.id]; delete DB.expenses[job.id]; delete DB.logs[job.id];
+          delete DB.categories[job.id]; delete DB.personnel[job.id]; delete DB.expenses[job.id]; delete DB.logs[job.id];
           saveDBNow();
           closeModal(); backToList(); toast('Đã xóa Job');
         }}]);
@@ -2810,6 +2985,65 @@ function moveCategory(id,dir,view){
   Cloud.saveJob(currentJob());
   renderSettingsTab(view);
 }
+/* ---- Personnel management (Settings) — same UX pattern as categories ---- */
+function personManageRow(p){
+  return '<div class="cat-manage-row person-manage-row" data-person-id="'+p.id+'">'+
+    '<span style="cursor:grab;color:var(--ink-faint);">⋮⋮</span>'+
+    '<span class="cat-swatch" data-person-swatch="'+p.id+'" title="Bấm để đổi màu" style="display:inline-block;width:14px;height:14px;border-radius:50%;cursor:pointer;flex-shrink:0;background:'+catColor(p.color_slot)+';border:1px solid var(--border-strong);"></span>'+
+    '<input type="text" value="'+escapeHtml(p.name)+'" data-person-name="'+p.id+'">'+
+    '<span class="rowmenu-btn" data-person-up="'+p.id+'" title="Lên">↑</span>'+
+    '<span class="rowmenu-btn" data-person-down="'+p.id+'" title="Xuống">↓</span>'+
+    '<span class="rowmenu-btn" data-person-del="'+p.id+'" title="Xóa">🗑</span>'+
+  '</div>';
+}
+function wirePersonManage(view){
+  view.querySelectorAll('[data-person-name]').forEach(function(inp){
+    inp.addEventListener('change',function(){
+      requireUser(function(){
+        var p = (DB.personnel[S.jobId]||[]).find(function(x){return x.id===inp.getAttribute('data-person-name');});
+        if(p){ p.name=inp.value.trim()||p.name; saveDBNow(); Cloud.saveJob(currentJob()); toast('Đã lưu'); }
+      });
+    });
+  });
+  view.querySelectorAll('[data-person-swatch]').forEach(function(sw){
+    sw.addEventListener('click',function(){
+      requireUser(function(){
+        var p = (DB.personnel[S.jobId]||[]).find(function(x){return x.id===sw.getAttribute('data-person-swatch');});
+        if(!p) return;
+        p.color_slot = ((p.color_slot||0)+1)%CAT_PALETTE.length;
+        sw.style.background = catColor(p.color_slot);
+        saveDBNow(); Cloud.saveJob(currentJob());
+      });
+    });
+  });
+  view.querySelectorAll('[data-person-up]').forEach(function(b){ b.addEventListener('click',function(){ requireUser(function(){ movePerson(b.getAttribute('data-person-up'),-1,view); }); }); });
+  view.querySelectorAll('[data-person-down]').forEach(function(b){ b.addEventListener('click',function(){ requireUser(function(){ movePerson(b.getAttribute('data-person-down'),1,view); }); }); });
+  view.querySelectorAll('[data-person-del]').forEach(function(b){
+    b.addEventListener('click',function(){
+      requireUser(function(){
+        var id = b.getAttribute('data-person-del');
+        var name = personName(id);
+        var used = (DB.expenses[S.jobId]||[]).some(function(e){return e.created_by===name;});
+        openModal('Xóa nhân sự?', '<p style="font-size:13.5px;color:var(--ink-soft);">'+(used?'Nhân sự này đang được gán ở một số khoản chi. Tên vẫn giữ nguyên trên các khoản chi đó, chỉ không còn trong danh sách chọn nhanh.':'Bạn có chắc muốn xóa nhân sự này?')+'</p>',
+          [{label:'Hủy',onClick:closeModal},{label:'Xóa',danger:true,onClick:function(){
+            DB.personnel[S.jobId] = (DB.personnel[S.jobId]||[]).filter(function(p){return p.id!==id;});
+            saveDBNow(); Cloud.saveJob(currentJob()); closeModal(); renderSettingsTab(view); toast('Đã xóa nhân sự');
+          }}]);
+      });
+    });
+  });
+}
+function movePerson(id,dir,view){
+  var list = (DB.personnel[S.jobId]||[]).slice().sort(function(a,b){return a.sort_order-b.sort_order;});
+  var idx = list.findIndex(function(p){return p.id===id;});
+  var swapIdx = idx+dir;
+  if(swapIdx<0||swapIdx>=list.length) return;
+  var a=list[idx].sort_order, b=list[swapIdx].sort_order;
+  list[idx].sort_order=b; list[swapIdx].sort_order=a;
+  saveDBNow();
+  Cloud.saveJob(currentJob());
+  renderSettingsTab(view);
+}
 
 /* ======================================================================
    MODAL SYSTEM
@@ -2839,7 +3073,7 @@ function modalEscHandler(ev){ if(ev.key==='Escape') closeModal(); }
 function closeModal(){
   var o = document.getElementById('activeOverlay');
   if(o) o.remove();
-  closeCatDropdown();
+  closeColorDropdown();
   document.removeEventListener('keydown',modalEscHandler);
   if(modalPasteHandler){ document.removeEventListener('paste',modalPasteHandler); modalPasteHandler=null; }
   if(modalOnDismiss){ var fn=modalOnDismiss; modalOnDismiss=null; fn(); }
